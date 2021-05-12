@@ -1,9 +1,10 @@
-﻿using System.Threading.Tasks;
+﻿using System.Threading;
+using System.Threading.Tasks;
 
 namespace WebsocketBroker.Abstractions
 {
     public interface IBrokerManager
     {
-        Task StartAsync();
+        Task StartAsync(CancellationToken cancellationToken);
     }
 }
