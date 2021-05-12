@@ -1,20 +1,3 @@
-# DockerizedAsp.netCoreApp
- Angular and Asp.net core application
+# Websocket Broker
 
-## local run Command
-docker build -t secure_docker_image .
-
-docker run -d  -p 5000:80 --name secure_docker_container secure_docker_image
-
-
-## docker hub push pull run Command
-docker build -t ranjeethmd/open-image:secure-docker-image .
-
-docker push ranjeethmd/open-image:secure-docker-image
-
-docker image rm ranjeethmd/open-image:secure-docker-image
-
-docker run -d  -p 5000:80 --name secure_docker_container ranjeethmd/open-image:secure-docker-image
-
-## docker compose example
-docker-compose up -d
+Personal project to build message broker similar to Kafka on websocket protocol that can be used seemlessly between Servers and Browsers. Use modern security mechanism like OIDC to authenticate and authorize user. 
