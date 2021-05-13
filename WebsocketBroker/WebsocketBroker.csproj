@@ -11,5 +11,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WebsocketBroker.Abstractions\WebsocketBroker.Abstractions.csproj" />
+    <ProjectReference Include="..\WebsocketBroker.Core.Default\WebsocketBroker.Core.Default.csproj" />
   </ItemGroup>
 </Project>

@@ -13,6 +13,7 @@ namespace WebsocketBroker
         private readonly ITcpClientManager _tcpClientManager;
         private readonly IConnectionManagement _connectionStratergy;
         private readonly IRequestHandler _requestHandler;
+        private readonly IBrokerManager _brokerManager;
 
 
 
@@ -21,13 +22,15 @@ namespace WebsocketBroker
             IServer server, 
             ITcpClientManager tcpClientManager,
             IConnectionManagement connectionStratergy,
-            IRequestHandler requestHandler)
+            IRequestHandler requestHandler,
+            IBrokerManager brokerManager)
         {
             _logger = logger;
             _server = server;
             _tcpClientManager = tcpClientManager;
             _connectionStratergy = connectionStratergy;
             _requestHandler = requestHandler;
+            _brokerManager = brokerManager;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -35,6 +38,7 @@ namespace WebsocketBroker
 
             var monitorConnections = _connectionStratergy.MonitorAsync(stoppingToken);
             var requestProcessing = _requestHandler.BeginPorcessAsync(stoppingToken);
+            var brokerTask = _brokerManager.StartAsync(stoppingToken);
 
             await foreach(var client in _server.StartAsync(stoppingToken))
             {

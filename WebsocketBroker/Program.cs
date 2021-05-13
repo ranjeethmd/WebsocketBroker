@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using WebsocketBroker.Extensions;
 
 namespace WebsocketBroker
 {
@@ -15,6 +16,7 @@ namespace WebsocketBroker
                 .ConfigureServices((hostContext, services) =>
                 {
                     services.AddHostedService<Worker>();
+                    services.Bootstrap();
                 });
     }
 }

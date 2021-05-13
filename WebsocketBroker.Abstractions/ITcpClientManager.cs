@@ -13,6 +13,8 @@ namespace WebsocketBroker.Abstractions
 
         void RemoveClient(ClientRecord client);
 
+        void UpdateClientRecordTime(ClientRecord record);
+
         IEnumerable<ClientRecord> GetStagnentClients(TimeSpan timeSpan);
     }
 }

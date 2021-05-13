@@ -32,6 +32,7 @@ namespace WebsocketBroker.Core.Default
                     {
                         byte[] bytes = new byte[record.Client.Available];
                         tasks.Add(record.Stream.ReadAsync(bytes, 0, record.Client.Available, cancellationToken),new(record,bytes));
+                        _tcpClientManager.UpdateClientRecordTime(record);
                     }
 
                     await Task.WhenAll(tasks.Keys).ConfigureAwait(false);

@@ -28,7 +28,7 @@ namespace WebsocketBroker.Core.Default
             server.Start();
 
             _logger.LogInformation($"Server started on ip {_ip} and port {_port}");
-            while (cancellationToken.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested)
             { 
                 var client = await server.AcceptTcpClientAsync().ConfigureAwait(false);
                 _logger.LogInformation("A client connected.");
