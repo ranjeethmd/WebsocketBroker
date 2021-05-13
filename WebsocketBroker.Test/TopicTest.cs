@@ -74,5 +74,22 @@ namespace WebsocketBroker.Test
             }
 
         }
+
+        [TestMethod]
+        public void TestTopicRemove()
+        {
+
+            try
+            {
+                _topic.CreatePartition();
+
+                _topic.RemoveTill(1);
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail(ex.Message, ex.StackTrace);
+            }
+
+        }
     }
 }

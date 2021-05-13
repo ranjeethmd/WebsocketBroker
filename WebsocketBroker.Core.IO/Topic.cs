@@ -14,10 +14,12 @@ namespace WebsocketBroker.Core.IO
         {
             _name = name;
             _location = location;
+
+            Reload();
         }
 
         private string CurrentFile { get; set; }
-        private string CurrentFileIndex { get; set; }
+        private long CurrentFileIndex { get; set; }
         private ulong CurrentOffset { get; set; }
 
         public void  CreatePartition()
@@ -29,7 +31,12 @@ namespace WebsocketBroker.Core.IO
             
             Directory.CreateDirectory(topicPath);
 
-            _refs.Add(CurrentFile ,MemoryMappedFile.CreateFromFile(Path.Combine(topicPath,$"p-{date}.data"), FileMode.OpenOrCreate, CurrentFile,1000000));
+            _refs.Add(CurrentFile ,MemoryMappedFile.CreateFromFile(Path.Combine(topicPath,$"P-{date}-{CurrentFileIndex}.data"), FileMode.OpenOrCreate, CurrentFile,1000000));
+
+        }
+
+        private void Reload()
+        {
 
         }
 
@@ -67,6 +74,29 @@ namespace WebsocketBroker.Core.IO
                 return data;
             }
             
+
+        }
+
+        public void RemoveTill(long offset)
+        {
+            using (MemoryMappedViewAccessor accessor = _refs[CurrentFile].CreateViewAccessor())
+            {
+
+                long pointer = 0;
+
+                for (int i = 0; i <= offset; i++)
+                {
+                    if (i > 0)
+                    {
+                        pointer += (long)accessor.ReadUInt64(pointer) + 8;
+                    }
+
+                    var size = accessor.ReadUInt64(pointer);
+                    byte[] data = new byte[size];
+                    accessor.WriteArray(pointer + 8, data, 0, data.Length);
+                }               
+
+            }
 
         }
 
