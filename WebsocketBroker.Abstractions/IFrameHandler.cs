@@ -2,7 +2,7 @@
 {
     public interface IFrameHandler
     {
-        byte[] ReadFrame(byte[] frameData, out bool isHandShake);
+        byte[] ReadFrame(byte[] frameData);
 
         byte[] CreateFrame(byte[] data);
     }

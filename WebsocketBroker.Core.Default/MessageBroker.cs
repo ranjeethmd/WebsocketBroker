@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ebsocketBroker.Core.Default.Interfaces;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,41 +12,45 @@ namespace WebsocketBroker.Core.Default
     public class MessageBroker : IBrokerManager
     {
         private readonly IRequestHandler _requestHandler;
-        private readonly IResponseHandler _responseHandler;
-        private readonly IFrameHandler _frameHandler;
+        private readonly IResponseHandler _responseHandler;        
+        private readonly ITopicFactory _topicFactory;
+
         public MessageBroker(IRequestHandler requestHandler,
             IResponseHandler responseHandler,
-            IFrameHandler frameHandler)
+            IFrameHandler frameHandler,
+            ITopicFactory topicFactory)
         {
             _requestHandler = requestHandler;
-            _responseHandler = responseHandler;
-            _frameHandler = frameHandler;
+            _responseHandler = responseHandler;            
+            _topicFactory = topicFactory;
         }
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            return Task.Run(async () =>
+            return Task.Run(() =>
             {
                 while (!cancellationToken.IsCancellationRequested)
-                {
-                    var tasks = new List<Task>();
+                {                   
 
-                    foreach (var context in _requestHandler.GetContext(cancellationToken))
+                    foreach (var content in _requestHandler.GetRequest(cancellationToken))
                     {
-                        var content = _frameHandler.ReadFrame(context.Content, out bool isHandShake);
+                        var topic = _topicFactory.GetTopic("Test");
+                        topic.CreatePartition();
+                        topic.AppendData(content);
 
-                        if (isHandShake)
-                        {
-                            tasks.Add(_responseHandler.SendHeaderResponse(context.Record, content,cancellationToken));
-                        }
-                        else
-                        {
-                           
-                            tasks.Add(_responseHandler.SendResponse(context.Record, content,cancellationToken));
-                        }
-                    }
+                        
 
-                    await Task.WhenAll(tasks).ConfigureAwait(false);
+                        //if (isHandShake)
+                        //{
+                        //    _ = _responseHandler.SendHeaderResponse(context.Record, content, cancellationToken);
+                        //}
+                        //else
+                        //{
+                        //    var frame = _frameHandler.CreateFrame(content);
+                        //    _ = _responseHandler.SendResponse(context.Record, frame, cancellationToken);
+                        //}
+                    }                   
                 }
+
             });
         }
     }

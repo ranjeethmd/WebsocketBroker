@@ -7,10 +7,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
 using WebsocketBroker.Core.IO.POCO;
+using WebsocketBroker.Abstractions;
 
 namespace WebsocketBroker.Core.IO
 {
-    public class Topic
+    public class Topic:ITopic
     {
         private readonly string _name,_location;
         private readonly LiteDatabase _db;
@@ -78,7 +79,7 @@ namespace WebsocketBroker.Core.IO
             _reloading.Set();
         }
 
-        private void IncreaePartitionCapacity()
+        private void IncreasePartitionCapacity()
         {
             _reloading.Reset();
 

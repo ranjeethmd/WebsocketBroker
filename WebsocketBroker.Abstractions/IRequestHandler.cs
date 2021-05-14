@@ -9,6 +9,6 @@ namespace WebsocketBroker.Abstractions
     {
         Task BeginPorcessAsync(CancellationToken cancellationToken);
 
-        IEnumerable<ContextRecord> GetContext(CancellationToken cancellationToken);
+        IEnumerable<byte[]> GetRequest(CancellationToken cancellationToken);
     }
 }

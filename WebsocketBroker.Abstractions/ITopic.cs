@@ -9,6 +9,10 @@ namespace WebsocketBroker.Abstractions
 {
     public interface ITopic
     {
-        Task AppendAsync(byte[] data, CancellationToken token);
+        void AppendData(byte[] data);
+
+        void CreatePartition();
+
+        byte[] ReadData(long offset);
     }
 }

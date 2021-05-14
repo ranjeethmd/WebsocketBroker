@@ -6,7 +6,7 @@ namespace WebsocketBroker.Abstractions
 {
     public interface IResponseHandler
     {
-        Task SendHeaderResponse(ClientRecord clientRecord, byte[] swkaSha1, CancellationToken token);
+        Task SendHeaderResponse(ClientRecord clientRecord, string header, CancellationToken token);
 
         Task SendResponse(ClientRecord clientRecord, byte[] data,CancellationToken token);
     }

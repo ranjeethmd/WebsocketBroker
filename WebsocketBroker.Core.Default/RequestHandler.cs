@@ -1,6 +1,9 @@
-﻿using System;
+﻿using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using WebsocketBroker.Abstractions;
@@ -11,11 +14,19 @@ namespace WebsocketBroker.Core.Default
     public class RequestHandler : IRequestHandler
     {
         private readonly ITcpClientManager _tcpClientManager;
-        private static BlockingCollection<ContextRecord> RequestStream { get; } = new BlockingCollection<ContextRecord>();
+        private readonly IFrameHandler _frameHandler;
+        private readonly ILogger<RequestHandler> _logger;
+        private readonly Regex _match = new Regex("GET (.*?) HTTP/1.1");
 
-        public RequestHandler(ITcpClientManager tcpClientManager)
+        private static ConcurrentQueue<ContextRecord> RequestStream { get; } = new ConcurrentQueue<ContextRecord>();
+
+        public RequestHandler(ITcpClientManager tcpClientManager,
+            IFrameHandler frameHandler,
+            ILogger<RequestHandler> logger)
         {
             _tcpClientManager = tcpClientManager;
+            _frameHandler = frameHandler;
+            _logger = logger;
         }
 
         // TODO: Make the functon Idempotent
@@ -38,20 +49,49 @@ namespace WebsocketBroker.Core.Default
                     await Task.WhenAll(tasks.Keys).ConfigureAwait(false);
 
                     Parallel.ForEach(tasks.Values, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, context => {
-                        RequestStream.Add(context);                    
+                        RequestStream.Enqueue(context);                    
                     });
                 }
             });            
         }
 
-        public IEnumerable<ContextRecord> GetContext(CancellationToken cancellationToken)
+        public IEnumerable<byte[]> GetRequest(CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                if(RequestStream.TryTake(out ContextRecord context, 60000))
+                if(RequestStream.TryDequeue(out ContextRecord context))
+                {  
+                    var content = Encoding.UTF8.GetString(context.Content);
+
+                    if (Regex.IsMatch(content, "^GET", RegexOptions.IgnoreCase))
+                    {
+                        _logger.LogInformation("=====Handshaking from client=====\n{0}", content);
+
+                        var method = _match.Match(content).Groups[1].ToString().ToLower();
+
+                        switch (method)
+                        {
+                            case "/publish":
+                                break;
+                            case "/consume":
+                                break;
+                            default:
+                                _logger.LogError($"Unknown method {method}");
+                                _tcpClientManager.RemoveClient(context.Record);
+                                break;
+                        }     
+                    }
+
+                    else
+                    {
+                        var data = _frameHandler.ReadFrame(context.Content);
+                        yield return data;
+                    }
+                }
+                else
                 {
-                    yield return context;
-                }                               
+                    break;
+                }
             }
         }
     }
