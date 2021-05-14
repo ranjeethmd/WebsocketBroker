@@ -83,7 +83,7 @@ namespace WebsocketBroker.Test
             {
                 _topic.CreatePartition();
 
-                _topic.RemoveTill(1);
+                _topic.RemoveTill(4);
             }
             catch (Exception ex)
             {

@@ -26,8 +26,7 @@ namespace WebsocketBroker.Core.IO
             _name = name;
             _location = location;
             var topicPath = Path.Combine(_location, $"T-{_name}");
-            var dbPath = Path.Combine(topicPath, $"T-{_name}.db");            
-
+           
             _db = new LiteDatabase(Path.Combine(topicPath,$"T-{_name}.db"));
 
             _topicContext = _db.GetCollection<TopicContext>("context");
@@ -56,7 +55,7 @@ namespace WebsocketBroker.Core.IO
                     Id = _name,
                     CurrentFile = $"T-{_name}-{date}",
                     CurrentLedgerRotation = 1,
-                    CurrentLedgerFile = Path.Combine(topicPath, $"L-{date}.data")
+                    CurrentLedgerFile = Path.Combine(topicPath, $"L-{date}.dat")
                 };                
             }
 
