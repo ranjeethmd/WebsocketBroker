@@ -1,40 +1,102 @@
-﻿using System;
+﻿using LiteDB;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.MemoryMappedFiles;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
+using WebsocketBroker.Core.IO.POCO;
 
 namespace WebsocketBroker.Core.IO
 {
     public class Topic
     {
         private readonly string _name,_location;
+        private readonly LiteDatabase _db;
         private readonly Dictionary<string, MemoryMappedFile> _refs = new Dictionary<string, MemoryMappedFile>();
+        private readonly ManualResetEvent _reloading = new ManualResetEvent(false);
+        private readonly int LEDGER_FILE_SIZE = 1000000000;
+        private readonly ILiteCollection<TopicContext> _topicContext;
+        private readonly ILiteCollection<LedgerInfo> _ledgerInfo;
+
+
         public Topic(string name, string location)
         {
             _name = name;
             _location = location;
+            var topicPath = Path.Combine(_location, $"T-{_name}");
+            var dbPath = Path.Combine(topicPath, $"T-{_name}.db");            
+
+            _db = new LiteDatabase(Path.Combine(topicPath,$"T-{_name}.db"));
+
+            _topicContext = _db.GetCollection<TopicContext>("context");
+            _ledgerInfo = _db.GetCollection<LedgerInfo>("ledger");
+
+           
 
             Reload();
-        }
-
-        private string CurrentFile { get; set; }
-        private long CurrentFileIndex { get; set; }
-        private ulong CurrentOffset { get; set; }
+        }       
+        
 
         public void  CreatePartition()
         {
+            _reloading.Reset();
+
             var date = DateTimeOffset.UtcNow.Date.ToString("ddMMyyyy");
-            CurrentFile = $"T-{_name}-{date}-{CurrentFileIndex}";
+
+            var context =_topicContext.Find(x => x.Id == _name,limit:1).FirstOrDefault();
 
             var topicPath = Path.Combine(_location, $"T-{_name}");
-            
+
+            if (context == null)
+            {
+                context = new TopicContext
+                {
+                    Id = _name,
+                    CurrentFile = $"T-{_name}-{date}",
+                    CurrentLedgerRotation = 1,
+                    CurrentLedgerFile = Path.Combine(topicPath, $"L-{date}.data")
+                };                
+            }
+
             Directory.CreateDirectory(topicPath);
 
-            _refs.Add(CurrentFile ,MemoryMappedFile.CreateFromFile(Path.Combine(topicPath,$"P-{date}-{CurrentFileIndex}.data"), FileMode.OpenOrCreate, CurrentFile,1000000));
+            if(File.Exists(context.CurrentLedgerFile))
+            {
+                _refs.Add(context.CurrentFile, MemoryMappedFile.CreateFromFile(context.CurrentLedgerFile, FileMode.OpenOrCreate, context.CurrentFile));
+            }
+            else
+            {
+                _refs.Add(context.CurrentFile, MemoryMappedFile.CreateFromFile(context.CurrentLedgerFile, FileMode.OpenOrCreate, context.CurrentFile, LEDGER_FILE_SIZE));
+                var fileContext = _db.GetCollection<FileContext>();
+                fileContext.Upsert(new FileContext {Id = context.CurrentFile,Path = context.CurrentLedgerFile });
+            }
 
+
+            _topicContext.Upsert(context);
+
+            _reloading.Set();
         }
 
+        private void IncreaePartitionCapacity()
+        {
+            _reloading.Reset();
+
+            var context = _topicContext.FindOne(x => x.Id == _name);
+
+            var mmf = _refs[context.CurrentFile];
+
+            mmf.Dispose();
+
+            context.CurrentLedgerRotation = context.CurrentLedgerRotation + 1;
+
+            _refs.Add(context.CurrentFile, MemoryMappedFile.CreateFromFile(context.CurrentLedgerFile, FileMode.OpenOrCreate, context.CurrentFile, context.CurrentLedgerRotation * LEDGER_FILE_SIZE));
+
+            _topicContext.Update(context);
+
+            _reloading.Set();
+        }
         private void Reload()
         {
 
@@ -42,34 +104,38 @@ namespace WebsocketBroker.Core.IO
 
         public void AppendData(byte[] data)
         {
-            var offset = (long)CurrentOffset;
-            using (MemoryMappedViewAccessor accessor = _refs[CurrentFile].CreateViewAccessor())
-            {
-                accessor.Write(offset, (ulong)data.Length);
-                accessor.WriteArray(offset + 8, data, 0, data.Length);
-            }
+            _reloading.WaitOne();
 
-            CurrentOffset = (ulong) (offset + 8 + data.Length);
+            var context = _topicContext.FindOne(x => x.Id == _name);
+
+            var info = _ledgerInfo.FindOne(Query.All(Query.Descending));           
+
+            var position = info?.Position + info?.Length  ?? 0;
+
+            using (MemoryMappedViewAccessor accessor = _refs[context.CurrentFile].CreateViewAccessor())
+            {               
+                accessor.WriteArray(position,  data, 0, data.Length);
+            }            
+
+            _ledgerInfo.Insert(new LedgerInfo { Id = info?.Id + 1 ?? 1, Length = data.Length, Position =  position, CreateData = DateTimeOffset.UtcNow});            
         }
 
         public byte[] ReadData(long offset)
         {
-            using (MemoryMappedViewAccessor accessor = _refs[CurrentFile].CreateViewAccessor())
+            _reloading.WaitOne();
+
+            var context = _topicContext.FindOne(x => x.Id == _name);
+
+            var infos = _ledgerInfo.FindAll();
+
+            var info = _ledgerInfo.FindOne(x => x.Id == offset);
+
+            using (MemoryMappedViewAccessor accessor = _refs[context.CurrentFile].CreateViewAccessor())
             {
-                
-                long pointer = 0;
-
-                for(int i =0; i <= offset; i++)
-                {
-                    if (i > 0)
-                    {
-                        pointer += (long)accessor.ReadUInt64(pointer) + 8;                        
-                    }
-                }                
-
-                var size = accessor.ReadUInt64(pointer);
+                var position = info.Position; 
+                var size = info.Length;
                 byte[] data = new byte[size];
-                accessor.ReadArray(pointer + 8, data, 0, data.Length);
+                accessor.ReadArray(position, data, 0, data.Length);
 
                 return data;
             }
@@ -79,21 +145,17 @@ namespace WebsocketBroker.Core.IO
 
         public void RemoveTill(long offset)
         {
-            using (MemoryMappedViewAccessor accessor = _refs[CurrentFile].CreateViewAccessor())
+            _reloading.WaitOne();
+
+            var context = _topicContext.FindOne(x => x.Id == _name);
+            var infos = _ledgerInfo.Find(x => x.Id <= offset);
+
+            using (MemoryMappedViewAccessor accessor = _refs[context.CurrentFile].CreateViewAccessor())
             {
-
-                long pointer = 0;
-
-                for (int i = 0; i <= offset; i++)
+                foreach (var info in infos)
                 {
-                    if (i > 0)
-                    {
-                        pointer += (long)accessor.ReadUInt64(pointer) + 8;
-                    }
-
-                    var size = accessor.ReadUInt64(pointer);
-                    byte[] data = new byte[size];
-                    accessor.WriteArray(pointer + 8, data, 0, data.Length);
+                    var data = new byte[info.Length];
+                    accessor.WriteArray(info.Position, data, 0, data.Length);
                 }               
 
             }

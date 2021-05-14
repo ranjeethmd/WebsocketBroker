@@ -62,8 +62,8 @@ namespace WebsocketBroker.Test
             try
             {
                 _topic.CreatePartition();
-                var bytes2 = _topic.ReadData(1);
-                var bytes1 = _topic.ReadData(0);
+                var bytes2 = _topic.ReadData(2);
+                var bytes1 = _topic.ReadData(1);
 
                 Assert.AreEqual("Hello world!", Encoding.UTF8.GetString(bytes1));
                 Assert.AreEqual("You are doing great!", Encoding.UTF8.GetString(bytes2));
