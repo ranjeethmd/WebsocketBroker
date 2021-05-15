@@ -20,6 +20,7 @@ namespace WebsocketBroker.Core.IO
         private readonly int LEDGER_FILE_SIZE = 1000000000;
         private readonly ILiteCollection<TopicContext> _topicContext;
         private readonly ILiteCollection<LedgerInfo> _ledgerInfo;
+        private readonly object _writeLockObj = new object();
 
 
         public Topic(string name, string location)
@@ -106,18 +107,22 @@ namespace WebsocketBroker.Core.IO
         {
             _reloading.WaitOne();
 
-            var context = _topicContext.FindOne(x => x.Id == _name);
+            lock (_writeLockObj)
+            {
 
-            var info = _ledgerInfo.FindOne(Query.All(Query.Descending));           
+                var context = _topicContext.FindOne(x => x.Id == _name);
 
-            var position = info?.Position + info?.Length  ?? 0;
+                var info = _ledgerInfo.FindOne(Query.All(Query.Descending));
 
-            using (MemoryMappedViewAccessor accessor = _refs[context.CurrentFile].CreateViewAccessor())
-            {               
-                accessor.WriteArray(position,  data, 0, data.Length);
-            }            
+                var position = info?.Position + info?.Length ?? 0;
 
-            _ledgerInfo.Insert(new LedgerInfo { Id = info?.Id + 1 ?? 1, Length = data.Length, Position =  position, CreateData = DateTimeOffset.UtcNow});            
+                using (MemoryMappedViewAccessor accessor = _refs[context.CurrentFile].CreateViewAccessor())
+                {
+                    accessor.WriteArray(position, data, 0, data.Length);
+                }
+
+                _ledgerInfo.Insert(new LedgerInfo { Id = info?.Id + 1 ?? 1, Length = data.Length, Position = position, CreateData = DateTimeOffset.UtcNow });
+            }
         }
 
         public byte[] ReadData(long offset)

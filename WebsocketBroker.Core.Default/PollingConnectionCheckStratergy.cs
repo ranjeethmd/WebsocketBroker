@@ -23,19 +23,19 @@ namespace WebsocketBroker.Core.Default
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    var records = _tcpClientManager.GetStagnentClients(TimeSpan.FromMinutes(5));
+                    var clients = _tcpClientManager.GetStagnentClients(TimeSpan.FromMinutes(5));
 
-                    Parallel.ForEach(records
+                    Parallel.ForEach(clients
                         , new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount}
-                        ,record => {
+                        ,client => {
 
-                            var socket = record.Client.Client;
+                            var socket = client.Client;
 
                             try
                             {
                                 if (socket.Poll(1000, SelectMode.SelectRead) && socket.Available == 0)
                                 {
-                                    _tcpClientManager.RemoveClient(record);
+                                    _tcpClientManager.RemoveClient(client);
                                 }
                             }
                             catch(Exception ex)

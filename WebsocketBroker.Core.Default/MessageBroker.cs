@@ -1,4 +1,5 @@
 ﻿using ebsocketBroker.Core.Default.Interfaces;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,44 +15,87 @@ namespace WebsocketBroker.Core.Default
         private readonly IRequestHandler _requestHandler;
         private readonly IResponseHandler _responseHandler;        
         private readonly ITopicFactory _topicFactory;
+        private readonly ILogger<MessageBroker> _logger;
+        private readonly SemaphoreSlim _publisherSlim = new SemaphoreSlim(Environment.ProcessorCount);
+        private readonly SemaphoreSlim _consumerSlim = new SemaphoreSlim(Environment.ProcessorCount);
 
         public MessageBroker(IRequestHandler requestHandler,
-            IResponseHandler responseHandler,
-            IFrameHandler frameHandler,
+            IResponseHandler responseHandler, 
+            ILogger<MessageBroker> logger,
             ITopicFactory topicFactory)
         {
             _requestHandler = requestHandler;
             _responseHandler = responseHandler;            
             _topicFactory = topicFactory;
+            _logger = logger;
         }
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            return Task.Run(() =>
+            var publisher =  Task.Run(async () =>
             {
+                var reader = _requestHandler.GetPublisherStream();
+
                 while (!cancellationToken.IsCancellationRequested)
-                {                   
+                {
+                    var context = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                    await _publisherSlim.WaitAsync().ConfigureAwait(false);
 
-                    foreach (var content in _requestHandler.GetRequest(cancellationToken))
-                    {
-                        var topic = _topicFactory.GetTopic("Test");
-                        topic.CreatePartition();
-                        topic.AppendData(content);
+                    _ = Task.Run(() => {
 
-                        
-
-                        //if (isHandShake)
-                        //{
-                        //    _ = _responseHandler.SendHeaderResponse(context.Record, content, cancellationToken);
-                        //}
-                        //else
-                        //{
-                        //    var frame = _frameHandler.CreateFrame(content);
-                        //    _ = _responseHandler.SendResponse(context.Record, frame, cancellationToken);
-                        //}
-                    }                   
+                        try
+                        {
+                            var topic = _topicFactory.GetTopic(context.Endpoint);
+                            topic.CreatePartition();
+                            topic.AppendData(context.Content);
+                        }
+                        catch(Exception ex)
+                        {
+                            _logger.LogError(ex, $"Error while processing data for Topic {context.Endpoint}");
+                        }
+                        finally
+                        {
+                            _publisherSlim.Release();
+                        }
+                    
+                    
+                    });
                 }
 
             });
+
+            var subscriber = Task.Run(async () =>
+            {
+                var reader = _requestHandler.GetConsumerStream();
+
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var context = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                    await _consumerSlim.WaitAsync().ConfigureAwait(false);
+
+                    _ = Task.Run(() => {
+
+                        try
+                        {
+                            var topic = _topicFactory.GetTopic(context.Endpoint);
+                            topic.CreatePartition();
+                            //topic.AppendData(context.Content);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, $"Error while processing data for Topic {context.Endpoint}");
+                        }
+                        finally
+                        {
+                            _consumerSlim.Release();
+                        }
+
+
+                    });
+                }
+
+            });
+
+            return Task.WhenAll(publisher, subscriber);
         }
     }
 }

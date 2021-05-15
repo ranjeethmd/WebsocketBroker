@@ -34,14 +34,14 @@ namespace WebsocketBroker.Core.Default
 
             await record.Stream.WriteAsync(response, 0, response.Length,token).ConfigureAwait(false);
 
-            _tcpClientManager.UpdateClientRecordTime(record);
+            _tcpClientManager.UpdateClientRecordTime(record.Client);
         }
 
         public async Task SendResponse(ClientRecord record, byte[] payload, CancellationToken token)
         {
             await record.Stream.WriteAsync(payload, 0, payload.Length, token).ConfigureAwait(false);
 
-            _tcpClientManager.UpdateClientRecordTime(record);
+            _tcpClientManager.UpdateClientRecordTime(record.Client);
         }
     }
 }

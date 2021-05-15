@@ -12,6 +12,7 @@ namespace WebsocketBroker.Core.Default
     public class TcpClientManager : ITcpClientManager
     {
         private readonly ConcurrentDictionary<TcpClient,DateTimeOffset> _clients = new ConcurrentDictionary<TcpClient, DateTimeOffset>();
+        private readonly List<Action<TcpClient>> _notificationList = new List<Action<TcpClient>>();
 
         public void AddClient(TcpClient client)
         {
@@ -19,11 +20,11 @@ namespace WebsocketBroker.Core.Default
             _clients.GetOrAdd(client, DateTimeOffset.UtcNow);
         }
 
-        public void UpdateClientRecordTime(ClientRecord record)
+        public void UpdateClientRecordTime(TcpClient client)
         {
-            if (_clients.TryGetValue(record.Client, out DateTimeOffset current))
+            if (_clients.TryGetValue(client, out DateTimeOffset current))
             {
-                _clients.TryUpdate(record.Client, DateTimeOffset.UtcNow,current);
+                _clients.TryUpdate(client, DateTimeOffset.UtcNow,current);
             }
         }
 
@@ -44,16 +45,23 @@ namespace WebsocketBroker.Core.Default
             return toBeProcessed;
         }
 
-        public IEnumerable<ClientRecord> GetStagnentClients(TimeSpan timeSpan)
+        public IEnumerable<TcpClient> GetStagnentClients(TimeSpan timeSpan)
         {
-            return _clients.AsParallel().Where(kv => DateTimeOffset.UtcNow - kv.Value >= timeSpan).Select(kv => new ClientRecord(kv.Key, kv.Key.GetStream())).ToArray();
+            return _clients.AsParallel().Where(kv => DateTimeOffset.UtcNow - kv.Value >= timeSpan).Select(kv => kv.Key).ToArray();
         }
 
-        public void RemoveClient(ClientRecord record)
+        public void RemoveClient(TcpClient client)
         {
-            record.Client.Close();
+            client.Close();
+            _clients.Remove(client, out _);
+            _notificationList.ForEach(action => {
+                _ = Task.Run(() => action(client));                           
+            });
+        }
 
-            _clients.Remove(record.Client, out DateTimeOffset _);
+        public void NotifyOnDelete(Action<TcpClient> action)
+        {
+            _notificationList.Add(action);
         }
     }
 }

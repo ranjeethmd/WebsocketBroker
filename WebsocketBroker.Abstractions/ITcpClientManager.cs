@@ -11,10 +11,12 @@ namespace WebsocketBroker.Abstractions
 
         IEnumerable<ClientRecord> GetClientsWithData();
 
-        void RemoveClient(ClientRecord client);
+        void RemoveClient(TcpClient client);
 
-        void UpdateClientRecordTime(ClientRecord record);
+        void UpdateClientRecordTime(TcpClient record);
 
-        IEnumerable<ClientRecord> GetStagnentClients(TimeSpan timeSpan);
+        IEnumerable<TcpClient> GetStagnentClients(TimeSpan timeSpan);
+
+        void NotifyOnDelete(Action<TcpClient> action);
     }
 }
