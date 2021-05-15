@@ -30,6 +30,8 @@ namespace WebsocketBroker.Extensions
             services.AddSingleton<IFrameHandler, FrameHandler>();
             services.AddSingleton<IRequestHandler, RequestHandler>();
             services.AddSingleton<IResponseHandler, ResponseHandler>();
+            services.AddSingleton<ISubscriptionManager, SubscriptionManager>();
+
 
             services.AddSingleton<ITopicFactory>(provider => {
                 var config = provider.GetRequiredService<IConfiguration>();
