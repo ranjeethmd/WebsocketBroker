@@ -1,7 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
 using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -111,11 +109,15 @@ namespace WebsocketBroker.Core.Default
             {
                 var subcriptionInfo = _subscriptionManager.GetSubscription(record.Client);
 
+                // TODO:Some one might send direct data frame on raw tcp. Currently since the subscription will not be setup it will fail. Build try catch to close connection
+
                 if (subcriptionInfo.Subscription == Subscription.Publisher)
                 {
                     var data = _frameHandler.ReadFrame(bytes);
                     await PublisherStream.Writer.WriteAsync(new PublisherRecord(subcriptionInfo.Endpoint, data), cancellationToken).ConfigureAwait(false);
                 }
+
+                // TODO:Some one might send direct data frame on raw tcp. Currently since the subscription will not be setup it will fail. Build try catch to close connection
 
                 if (subcriptionInfo.Subscription == Subscription.Consumer)
                 {

@@ -1,8 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
-using System;
+﻿using System;
 using System.IO;
-using System.Text;
-using System.Text.RegularExpressions;
 using WebsocketBroker.Abstractions;
 using WebsocketBroker.Abstractions.Exceptions;
 

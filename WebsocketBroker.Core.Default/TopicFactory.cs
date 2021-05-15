@@ -1,9 +1,9 @@
-﻿using System;
+﻿using ebsocketBroker.Core.Default.Interfaces;
+using System;
 using System.Collections.Concurrent;
 using System.IO;
 using WebsocketBroker.Abstractions;
 using WebsocketBroker.Core.IO;
-using ebsocketBroker.Core.Default.Interfaces;
 
 namespace ebsocketBroker.Core.Default.Services
 {

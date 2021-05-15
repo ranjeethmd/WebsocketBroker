@@ -3,11 +3,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.MemoryMappedFiles;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Linq;
-using WebsocketBroker.Core.IO.POCO;
+using System.Threading;
 using WebsocketBroker.Abstractions;
+using WebsocketBroker.Core.IO.POCO;
 
 namespace WebsocketBroker.Core.IO
 {
