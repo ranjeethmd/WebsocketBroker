@@ -33,8 +33,6 @@ namespace WebsocketBroker.Core.IO
             _topicContext = _db.GetCollection<TopicContext>("context");
             _ledgerInfo = _db.GetCollection<LedgerInfo>("ledger");
 
-           
-
             Reload();
         }       
         
@@ -134,13 +132,16 @@ namespace WebsocketBroker.Core.IO
 
             var info = _ledgerInfo.FindOne(x => x.Id == offset);
 
+            if (info == null)
+                return new byte[0];
+
             using (MemoryMappedViewAccessor accessor = _refs[context.CurrentFile].CreateViewAccessor())
             {
                 var position = info.Position; 
                 var size = info.Length;
                 byte[] data = new byte[size];
-                accessor.ReadArray(position, data, 0, data.Length);
 
+                accessor.ReadArray(position, data, 0, data.Length);
                 return data;
             }
             

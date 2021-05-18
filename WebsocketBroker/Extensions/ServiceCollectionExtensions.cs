@@ -31,6 +31,7 @@ namespace WebsocketBroker.Extensions
             services.AddSingleton<IRequestHandler, RequestHandler>();
             services.AddSingleton<IResponseHandler, ResponseHandler>();
             services.AddSingleton<ISubscriptionManager, SubscriptionManager>();
+            services.AddSingleton<IClientSelectionStratergy, RandomSelectionStratergy>();
 
 
             services.AddSingleton<ITopicFactory>(provider => {

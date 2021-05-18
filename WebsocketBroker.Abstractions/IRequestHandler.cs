@@ -8,8 +8,8 @@ namespace WebsocketBroker.Abstractions
     public interface IRequestHandler
     {
         Task BeginPorcessAsync(CancellationToken cancellationToken);
-        ChannelReader<PublisherRecord> GetPublisherStream();
+        ChannelReader<EndpointRecord> GetPublisherStream();
 
-        ChannelReader<ConsumerRecord> GetConsumerStream();
+        ChannelReader<EndpointRecord> GetConsumerStream();
     }
 }

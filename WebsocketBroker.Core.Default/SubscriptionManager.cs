@@ -10,39 +10,38 @@ namespace WebsocketBroker.Core.Default
     public class SubscriptionManager :  ISubscriptionManager
     {
         private readonly ConcurrentDictionary<TcpClient, SubscriptionRecordGroup> _client2Subscription;
-        private readonly ConcurrentDictionary<SubscriptionRecord, SubscriptionGroups> _subscriptions2Client;
-        private record SubscriptionRecordGroup(SubscriptionRecord Record, GroupName Group = null);
+
+        private readonly ConcurrentDictionary<SubscriptionRecord, ClientGroup> _subscriptions2Client;
+     
+        private record SubscriptionRecordGroup(SubscriptionRecord Record, Group Group);
        
 
         public SubscriptionManager(ITcpClientManager tcpClientManager)
         {
             _client2Subscription = new ConcurrentDictionary<TcpClient, SubscriptionRecordGroup>();
-            _subscriptions2Client = new ConcurrentDictionary<SubscriptionRecord, SubscriptionGroups>();
+            _subscriptions2Client = new ConcurrentDictionary<SubscriptionRecord, ClientGroup>();
             tcpClientManager.NotifyOnDelete(RemoveClient);
         }
 
-        public void AddConsumer(TcpClient tcpClient, SubscriptionRecord subscription, GroupName group) 
+        public void AddSubscription(TcpClient tcpClient, SubscriptionRecord subscription, Group group) 
         {
             _= _client2Subscription.GetOrAdd(tcpClient, new SubscriptionRecordGroup(subscription,group));
 
-            var groups = _subscriptions2Client.GetOrAdd(subscription, new SubscriptionGroups());
+            var groups = _subscriptions2Client.GetOrAdd(subscription, new ClientGroup());
 
             var clients= groups.GetOrAdd(group, new SynchronizedCollection<TcpClient>());
 
             clients.Add(tcpClient);
         }
 
-        public void AddPublisher(TcpClient tcpClient, SubscriptionRecord subscription)
-        {
-            _ = _client2Subscription.GetOrAdd(tcpClient, new SubscriptionRecordGroup(subscription));
-        }
+       
 
-        public SubscriptionGroups GetConsumers(SubscriptionRecord subscription)
+        public ClientGroup GetClientGroup(SubscriptionRecord subscription)
         {
             return _subscriptions2Client[subscription];
         }
 
-        public GroupName GetConsumerGroup(TcpClient client)
+        public Group GetSubscriptionGroup(TcpClient client)
         {
             return _client2Subscription[client].Group;
         }
@@ -59,6 +58,11 @@ namespace WebsocketBroker.Core.Default
                 .ForAll(clients => clients.Remove(tcpClient));
 
             _client2Subscription.Remove(tcpClient, out SubscriptionRecordGroup _ );
+        }
+
+        public ICollection<TcpClient> GetGroupClients(Group group)
+        {
+            throw new System.NotImplementedException();
         }
     }
 }

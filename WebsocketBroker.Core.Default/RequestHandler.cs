@@ -18,8 +18,8 @@ namespace WebsocketBroker.Core.Default
         private readonly ISubscriptionManager _subscriptionManager;
         private readonly Regex _match = new Regex("GET (.*?) HTTP/1.1");
 
-        private static Channel<PublisherRecord> PublisherStream { get; } = Channel.CreateUnbounded<PublisherRecord>();
-        private static Channel<ConsumerRecord> ConsumerStream { get; } = Channel.CreateUnbounded<ConsumerRecord>();
+        private static Channel<EndpointRecord> PublisherStream { get; } = Channel.CreateUnbounded<EndpointRecord>();
+        private static Channel<EndpointRecord> ConsumerStream { get; } = Channel.CreateUnbounded<EndpointRecord>();
 
         public RequestHandler(ITcpClientManager tcpClientManager,
             IFrameHandler frameHandler,
@@ -35,7 +35,7 @@ namespace WebsocketBroker.Core.Default
         // TODO: Make the functon Idempotent
         public  Task BeginPorcessAsync(CancellationToken cancellationToken)
         {
-            return Task.Run(async ()=> {
+            return Task.Run(()=> {
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     var records = _tcpClientManager.GetClientsWithData();                   
@@ -50,7 +50,7 @@ namespace WebsocketBroker.Core.Default
             });            
         }
 
-        public ChannelReader<PublisherRecord> GetPublisherStream()
+        public ChannelReader<EndpointRecord> GetPublisherStream()
         {
             return PublisherStream.Reader;
         }
@@ -69,14 +69,15 @@ namespace WebsocketBroker.Core.Default
                 _logger.LogInformation("=====Handshaking from client=====\n{0}", content);
 
                 var method = _match.Match(content).Groups[1].ToString().Trim();
+                var split = method.ToUpperInvariant().Split('/');
 
-                if(method.StartsWith("/publish",StringComparison.InvariantCultureIgnoreCase))
+                if (method.StartsWith("/publish",StringComparison.InvariantCultureIgnoreCase))
                 {
-                    var split = method.ToUpperInvariant().Split('/');
+                   
 
                     if(split.Length == 2)
                     {
-                        _subscriptionManager.AddPublisher(record.Client, new SubscriptionRecord(split[1],Subscription.Publisher));
+                        _subscriptionManager.AddSubscription(record.Client, new SubscriptionRecord(split[1],Subscription.Publisher), new Abstractions.POCO.Group(split[2]));
                     }
                     else
                     {
@@ -85,12 +86,11 @@ namespace WebsocketBroker.Core.Default
                     }
                 }
                 else if(method.StartsWith("/consume", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    var split = method.ToUpperInvariant().Split('/');
+                {                    
 
                     if (split.Length == 3)
                     {
-                        _subscriptionManager.AddConsumer(record.Client, new SubscriptionRecord(split[1], Subscription.Consumer), new GroupName(split[2]));
+                        _subscriptionManager.AddSubscription(record.Client, new SubscriptionRecord(split[1], Subscription.Consumer), new Abstractions.POCO.Group(split[2]));
                     }
                     else
                     {
@@ -108,22 +108,21 @@ namespace WebsocketBroker.Core.Default
             else
             {
                 var subcriptionInfo = _subscriptionManager.GetSubscription(record.Client);
+                var data = _frameHandler.ReadFrame(bytes);
+                var group = _subscriptionManager.GetSubscriptionGroup(record.Client);
 
                 // TODO:Some one might send direct data frame on raw tcp. Currently since the subscription will not be setup it will fail. Build try catch to close connection
 
                 if (subcriptionInfo.Subscription == Subscription.Publisher)
                 {
-                    var data = _frameHandler.ReadFrame(bytes);
-                    await PublisherStream.Writer.WriteAsync(new PublisherRecord(subcriptionInfo.Endpoint, data), cancellationToken).ConfigureAwait(false);
+                    await PublisherStream.Writer.WriteAsync(new EndpointRecord(subcriptionInfo.Endpoint, group, data), cancellationToken).ConfigureAwait(false);
                 }
 
                 // TODO:Some one might send direct data frame on raw tcp. Currently since the subscription will not be setup it will fail. Build try catch to close connection
 
                 if (subcriptionInfo.Subscription == Subscription.Consumer)
                 {
-                    var data = _frameHandler.ReadFrame(bytes);                   
-                    var group = _subscriptionManager.GetConsumerGroup(record.Client);
-                    await ConsumerStream.Writer.WriteAsync(new ConsumerRecord(subcriptionInfo.Endpoint,group, data), cancellationToken).ConfigureAwait(false);
+                    await ConsumerStream.Writer.WriteAsync(new EndpointRecord(subcriptionInfo.Endpoint, group, data), cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {
@@ -133,7 +132,7 @@ namespace WebsocketBroker.Core.Default
             }           
         }
 
-        public ChannelReader<ConsumerRecord> GetConsumerStream()
+        public ChannelReader<EndpointRecord> GetConsumerStream()
         {
             return ConsumerStream.Reader;
         }

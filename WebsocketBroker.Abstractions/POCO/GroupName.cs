@@ -1,15 +1,14 @@
 ﻿namespace WebsocketBroker.Abstractions.POCO
 {
-    public class GroupName
+    public class Group
     {
-        public GroupName(string name, long offset = 0)
+        public Group(string name)
         {
-            Name = name;
-            Offset = offset;
+            Name = name.ToUpperInvariant();
         }
 
         public string Name { get; }
-        public long Offset { get; set; }
+      
         
     }
 }

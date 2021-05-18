@@ -4,7 +4,11 @@ using System.Net.Sockets;
 
 namespace WebsocketBroker.Abstractions.POCO
 {
-    public class SubscriptionGroups: ConcurrentDictionary<GroupName, SynchronizedCollection<TcpClient>>
+
+    /// <summary>
+    /// Holds mapping between group and clients
+    /// </summary>
+    public class ClientGroup: ConcurrentDictionary<Group, SynchronizedCollection<TcpClient>>
     {
     }
 }

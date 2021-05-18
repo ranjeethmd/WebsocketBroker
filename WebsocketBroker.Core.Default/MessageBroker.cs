@@ -4,6 +4,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using WebsocketBroker.Abstractions;
+using WebsocketBroker.Abstractions.POCO;
 
 namespace WebsocketBroker.Core.Default
 {
@@ -33,21 +34,25 @@ namespace WebsocketBroker.Core.Default
                 var reader = _requestHandler.GetPublisherStream();
 
                 while (!cancellationToken.IsCancellationRequested)
-                {
+                {                    
+                    await _publisherSlim.WaitAsync(cancellationToken).ConfigureAwait(false);
                     var context = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
-                    await _publisherSlim.WaitAsync().ConfigureAwait(false);
 
-                    _ = Task.Run(() => {
+                    _ = Task.Run(async () => {
 
                         try
                         {
                             var topic = _topicFactory.GetTopic(context.Endpoint);
                             topic.CreatePartition();
-                            topic.AppendData(context.Content);
+                            topic.AppendData(context.Data);
+
+                            await _responseHandler.SendResponse(context.Group, AckConstants.ACCEPT, cancellationToken).ConfigureAwait(false);
                         }
                         catch(Exception ex)
                         {
                             _logger.LogError(ex, $"Error while processing data for Topic {context.Endpoint}");
+
+                            await _responseHandler.SendResponse(context.Group, AckConstants.REJECT, cancellationToken).ConfigureAwait(false);
                         }
                         finally
                         {
@@ -65,17 +70,22 @@ namespace WebsocketBroker.Core.Default
                 var reader = _requestHandler.GetConsumerStream();
 
                 while (!cancellationToken.IsCancellationRequested)
-                {
+                {                    
+                    await _consumerSlim.WaitAsync(cancellationToken).ConfigureAwait(false);
                     var context = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
-                    await _consumerSlim.WaitAsync().ConfigureAwait(false);
 
-                    _ = Task.Run(() => {
+                    _ = Task.Run(async () => {
 
                         try
                         {
                             var topic = _topicFactory.GetTopic(context.Endpoint);
                             topic.CreatePartition();
-                            //topic.AppendData(context.Content);
+
+                            var offset = BitConverter.ToInt64(context.Data);
+
+                            var data = topic.ReadData(offset);
+
+                            await _responseHandler.SendResponse(context.Group, data, cancellationToken).ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {
