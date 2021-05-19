@@ -12,21 +12,23 @@ namespace WebsocketBroker.Core.Default
 {
     public class RequestHandler : IRequestHandler
     {
-        private readonly ITcpClientManager _tcpClientManager;
+        private readonly ITcpClientManager _tcpManager;
         private readonly IFrameHandler _frameHandler;
         private readonly ILogger<RequestHandler> _logger;
         private readonly ISubscriptionManager _subscriptionManager;
         private readonly Regex _match = new Regex("GET (.*?) HTTP/1.1");
+        private readonly SemaphoreSlim _requestSlim = new SemaphoreSlim(Environment.ProcessorCount);
+
 
         private static Channel<EndpointRecord> PublisherStream { get; } = Channel.CreateUnbounded<EndpointRecord>();
         private static Channel<EndpointRecord> ConsumerStream { get; } = Channel.CreateUnbounded<EndpointRecord>();
 
-        public RequestHandler(ITcpClientManager tcpClientManager,
+        public RequestHandler(ITcpClientManager tcpManager,
             IFrameHandler frameHandler,
             ISubscriptionManager subscriptionManager,
             ILogger<RequestHandler> logger)
         {
-            _tcpClientManager = tcpClientManager;
+            _tcpManager = tcpManager;
             _frameHandler = frameHandler;
             _logger = logger;
             _subscriptionManager = subscriptionManager;
@@ -35,17 +37,18 @@ namespace WebsocketBroker.Core.Default
         // TODO: Make the functon Idempotent
         public  Task BeginPorcessAsync(CancellationToken cancellationToken)
         {
-            return Task.Run(()=> {
+            return Task.Run(async ()=> {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    var records = _tcpClientManager.GetClientsWithData();                   
-                    
+                    var reader = _tcpManager.GetClientStream();
+                    var client = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
 
-                    foreach(var record in records)
-                    {
-                        _ = ProcessContentAsync(record, cancellationToken);                      
-                        
-                    }
+                    await _requestSlim.WaitAsync().ConfigureAwait(false);
+
+                    _ = Task.Run(async () => {
+                        await ProcessContentAsync(client, cancellationToken).ConfigureAwait(false);
+                    });                    
+                    
                 }
             });            
         }
@@ -55,12 +58,9 @@ namespace WebsocketBroker.Core.Default
             return PublisherStream.Reader;
         }
 
-        private async Task ProcessContentAsync(ClientRecord record,CancellationToken cancellationToken)
+        private async Task ProcessContentAsync(ITcpClient client,CancellationToken cancellationToken)
         {
-            byte[] bytes = new byte[record.Client.Available];
-            
-            await record.Stream.ReadAsync(bytes, 0, record.Client.Available, cancellationToken).ConfigureAwait(false);
-            _tcpClientManager.UpdateClientRecordTime(record.Client);
+            var bytes = await client.GetDataAync(cancellationToken).ConfigureAwait(false);
 
             var content = Encoding.UTF8.GetString(bytes);
 
@@ -75,14 +75,14 @@ namespace WebsocketBroker.Core.Default
                 {
                    
 
-                    if(split.Length == 2)
+                    if(split.Length == 3)
                     {
-                        _subscriptionManager.AddSubscription(record.Client, new SubscriptionRecord(split[1],Subscription.Publisher), new Abstractions.POCO.Group(split[2]));
+                        _subscriptionManager.AddSubscription(client, new SubscriptionRecord(split[1],Subscription.Publisher), new Abstractions.POCO.Group(split[2]));
                     }
                     else
                     {
                         _logger.LogError($"Unknown method {method}");
-                        _tcpClientManager.RemoveClient(record.Client);
+                        client.Disconnect();
                     }
                 }
                 else if(method.StartsWith("/consume", StringComparison.InvariantCultureIgnoreCase))
@@ -90,35 +90,40 @@ namespace WebsocketBroker.Core.Default
 
                     if (split.Length == 3)
                     {
-                        _subscriptionManager.AddSubscription(record.Client, new SubscriptionRecord(split[1], Subscription.Consumer), new Abstractions.POCO.Group(split[2]));
+                        _subscriptionManager.AddSubscription(client, new SubscriptionRecord(split[1], Subscription.Consumer), new Abstractions.POCO.Group(split[2]));
                     }
                     else
                     {
                         _logger.LogError($"Unknown method {method}");
-                        _tcpClientManager.RemoveClient(record.Client);
+                        client.Disconnect();
                     }
                 }
                 else
                 {
                     _logger.LogError($"Unknown method {method}");
-                    _tcpClientManager.RemoveClient(record.Client);                    
+                    client.Disconnect();                   
                 }               
             }
 
             else
             {
-                var subcriptionInfo = _subscriptionManager.GetSubscription(record.Client);
-                var data = _frameHandler.ReadFrame(bytes);
-                var group = _subscriptionManager.GetSubscriptionGroup(record.Client);
+                var subcriptionInfo = _subscriptionManager.GetSubscription(client);
 
-                // TODO:Some one might send direct data frame on raw tcp. Currently since the subscription will not be setup it will fail. Build try catch to close connection
+                if(subcriptionInfo == null)
+                {
+                    client.Disconnect();
+                    return;
+                }
+
+                var data = _frameHandler.ReadFrame(bytes);
+                var group = _subscriptionManager.GetSubscriptionGroup(client);
+
+                
 
                 if (subcriptionInfo.Subscription == Subscription.Publisher)
                 {
                     await PublisherStream.Writer.WriteAsync(new EndpointRecord(subcriptionInfo.Endpoint, group, data), cancellationToken).ConfigureAwait(false);
-                }
-
-                // TODO:Some one might send direct data frame on raw tcp. Currently since the subscription will not be setup it will fail. Build try catch to close connection
+                }                
 
                 if (subcriptionInfo.Subscription == Subscription.Consumer)
                 {
@@ -126,7 +131,7 @@ namespace WebsocketBroker.Core.Default
                 }
                 else
                 {
-                    _tcpClientManager.RemoveClient(record.Client);
+                    client.Disconnect();
                 }
 
             }           

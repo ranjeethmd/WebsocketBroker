@@ -1,26 +1,26 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
-using System.Net.Sockets;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using WebsocketBroker.Abstractions;
-using WebsocketBroker.Abstractions.POCO;
+
 
 namespace WebsocketBroker.Core.Default
 {
-    public class TcpClientManager : ITcpClientManager
+    public class TcpClientManager : ITcpStreamManager
     {
-        private readonly ConcurrentDictionary<TcpClient,DateTimeOffset> _clients = new ConcurrentDictionary<TcpClient, DateTimeOffset>();
-        private readonly List<Action<TcpClient>> _notificationList = new List<Action<TcpClient>>();
+        private readonly ConcurrentDictionary<ITcpClient,DateTimeOffset> _clients = new ConcurrentDictionary<ITcpClient, DateTimeOffset>();
+        private readonly List<Action<ITcpClient>> _notificationList = new List<Action<ITcpClient>>();
+        private readonly Channel<ITcpClient> _dataClientStream = Channel.CreateUnbounded<ITcpClient>();
 
-        public void AddClient(TcpClient client)
+        public void AddClient(ITcpClient client)
         {
             
             _clients.GetOrAdd(client, DateTimeOffset.UtcNow);
         }
 
-        public void UpdateClientRecordTime(TcpClient client)
+        public void UpdateClientRecordTime(ITcpClient client)
         {
             if (_clients.TryGetValue(client, out DateTimeOffset current))
             {
@@ -28,40 +28,34 @@ namespace WebsocketBroker.Core.Default
             }
         }
 
-        public IEnumerable<ClientRecord> GetClientsWithData()
+       
+
+        public void RemoveClient(ITcpClient client)
         {
-            var toBeProcessed = new ConcurrentBag<ClientRecord>();
-
-            Parallel.ForEach(_clients.Keys, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, client => {
-                
-                var stream = client.GetStream();
-
-                if (stream.DataAvailable && client.Available > 3)
-                {
-                    toBeProcessed.Add(new ClientRecord(client, stream));
-                }
-            });
-
-            return toBeProcessed;
-        }
-
-        public IEnumerable<TcpClient> GetStagnentClients(TimeSpan timeSpan)
-        {
-            return _clients.AsParallel().Where(kv => DateTimeOffset.UtcNow - kv.Value >= timeSpan).Select(kv => kv.Key).ToArray();
-        }
-
-        public void RemoveClient(TcpClient client)
-        {
-            client.Close();
             _clients.Remove(client, out _);
             _notificationList.ForEach(action => {
                 _ = Task.Run(() => action(client));                           
             });
         }
 
-        public void NotifyOnDelete(Action<TcpClient> action)
+        public void NotifyOnDelete(Action<ITcpClient> action)
         {
             _notificationList.Add(action);
+        }
+
+        public ChannelReader<ITcpClient> GetClientStream()
+        {
+            return _dataClientStream.Reader;
+        }
+
+        void ITcpStreamManager.AddDataClient(ITcpClient tcpClient)
+        {
+           _ = _dataClientStream.Writer.WriteAsync(tcpClient);
+        }
+
+        public DateTimeOffset GetLastActivityDate(ITcpClient client)
+        {
+            return _clients[client];
         }
     }
 }

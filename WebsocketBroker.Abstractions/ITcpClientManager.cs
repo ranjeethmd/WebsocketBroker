@@ -1,22 +1,20 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Net.Sockets;
-using WebsocketBroker.Abstractions.POCO;
+using System.Threading.Channels;
 
 namespace WebsocketBroker.Abstractions
 {
     public interface ITcpClientManager
     {
-        void AddClient(TcpClient client);
+        void AddClient(ITcpClient client);
 
-        IEnumerable<ClientRecord> GetClientsWithData();
+        void RemoveClient(ITcpClient client);
 
-        void RemoveClient(TcpClient client);
+        void UpdateClientRecordTime(ITcpClient record);
 
-        void UpdateClientRecordTime(TcpClient record);
+        DateTimeOffset GetLastActivityDate(ITcpClient client);
 
-        IEnumerable<TcpClient> GetStagnentClients(TimeSpan timeSpan);
+        void NotifyOnDelete(Action<ITcpClient> action);
 
-        void NotifyOnDelete(Action<TcpClient> action);
+        ChannelReader<ITcpClient> GetClientStream();
     }
 }

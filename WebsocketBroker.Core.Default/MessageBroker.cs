@@ -17,6 +17,9 @@ namespace WebsocketBroker.Core.Default
         private readonly SemaphoreSlim _publisherSlim = new SemaphoreSlim(Environment.ProcessorCount);
         private readonly SemaphoreSlim _consumerSlim = new SemaphoreSlim(Environment.ProcessorCount);
 
+        private Task _publishTask;
+        private Task _consumerTask;
+
         public MessageBroker(IRequestHandler requestHandler,
             IResponseHandler responseHandler, 
             ILogger<MessageBroker> logger,
@@ -29,80 +32,88 @@ namespace WebsocketBroker.Core.Default
         }
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            var publisher =  Task.Run(async () =>
+            if (_publishTask == null)
             {
-                var reader = _requestHandler.GetPublisherStream();
+                _publishTask = Task.Run(async () =>
+               {
+                   var reader = _requestHandler.GetPublisherStream();
 
-                while (!cancellationToken.IsCancellationRequested)
-                {                    
-                    await _publisherSlim.WaitAsync(cancellationToken).ConfigureAwait(false);
-                    var context = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                   while (!cancellationToken.IsCancellationRequested)
+                   {
+                       await _publisherSlim.WaitAsync(cancellationToken).ConfigureAwait(false);
+                       var context = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
 
-                    _ = Task.Run(async () => {
+                       _ = Task.Run(async () =>
+                       {
 
-                        try
-                        {
-                            var topic = _topicFactory.GetTopic(context.Endpoint);
-                            topic.CreatePartition();
-                            topic.AppendData(context.Data);
+                           try
+                           {
+                               var topic = _topicFactory.GetTopic(context.Endpoint);
+                               topic.CreatePartition();
+                               topic.AppendData(context.Data);
 
-                            await _responseHandler.SendResponse(context.Group, AckConstants.ACCEPT, cancellationToken).ConfigureAwait(false);
-                        }
-                        catch(Exception ex)
-                        {
-                            _logger.LogError(ex, $"Error while processing data for Topic {context.Endpoint}");
+                               await _responseHandler.SendResponseAsync(context.Group, AckConstants.ACCEPT, cancellationToken).ConfigureAwait(false);
+                           }
+                           catch (Exception ex)
+                           {
+                               _logger.LogError(ex, $"Error while processing data for Topic {context.Endpoint}");
 
-                            await _responseHandler.SendResponse(context.Group, AckConstants.REJECT, cancellationToken).ConfigureAwait(false);
-                        }
-                        finally
-                        {
-                            _publisherSlim.Release();
-                        }
-                    
-                    
-                    });
-                }
+                               await _responseHandler.SendResponseAsync(context.Group, AckConstants.REJECT, cancellationToken).ConfigureAwait(false);
+                           }
+                           finally
+                           {
+                               _publisherSlim.Release();
+                           }
 
-            });
 
-            var subscriber = Task.Run(async () =>
+                       });
+                   }
+
+               });
+            }
+
+            if (_consumerTask == null)
             {
-                var reader = _requestHandler.GetConsumerStream();
+                _consumerTask = Task.Run(async () =>
+                {
+                    var reader = _requestHandler.GetConsumerStream();
 
-                while (!cancellationToken.IsCancellationRequested)
-                {                    
-                    await _consumerSlim.WaitAsync(cancellationToken).ConfigureAwait(false);
-                    var context = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        await _consumerSlim.WaitAsync(cancellationToken).ConfigureAwait(false);
+                        var context = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
 
-                    _ = Task.Run(async () => {
-
-                        try
+                        _ = Task.Run(async () =>
                         {
-                            var topic = _topicFactory.GetTopic(context.Endpoint);
-                            topic.CreatePartition();
 
-                            var offset = BitConverter.ToInt64(context.Data);
+                            try
+                            {
+                                var topic = _topicFactory.GetTopic(context.Endpoint);
+                                topic.CreatePartition();
 
-                            var data = topic.ReadData(offset);
+                                var offset = BitConverter.ToInt64(context.Data);
 
-                            await _responseHandler.SendResponse(context.Group, data, cancellationToken).ConfigureAwait(false);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, $"Error while processing data for Topic {context.Endpoint}");
-                        }
-                        finally
-                        {
-                            _consumerSlim.Release();
-                        }
+                                var data = topic.ReadData(offset);
+
+                                await _responseHandler.SendResponseAsync(context.Group, data, cancellationToken).ConfigureAwait(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, $"Error while processing data for Topic {context.Endpoint}");
+                            }
+                            finally
+                            {
+                                _consumerSlim.Release();
+                            }
 
 
-                    });
-                }
+                        });
+                    }
 
-            });
+                });
+            }
 
-            return Task.WhenAll(publisher, subscriber);
+            return Task.WhenAll(_publishTask, _consumerTask);
         }
     }
 }

@@ -1,15 +1,14 @@
 ﻿using System.Collections.Generic;
-using System.Net.Sockets;
 using WebsocketBroker.Abstractions.POCO;
 
 namespace WebsocketBroker.Abstractions
 {
     public interface ISubscriptionManager
     {
-        void AddSubscription(TcpClient tcpClient, SubscriptionRecord subscription, Group group);
-        ClientGroup GetClientGroup(SubscriptionRecord subscription);
-        SubscriptionRecord GetSubscription(TcpClient client);
-        Group GetSubscriptionGroup(TcpClient client);
-        ICollection<TcpClient> GetGroupClients(Group group);
+        void AddSubscription(ITcpClient tcpClient, SubscriptionRecord subscription, Group group);
+        GroupClients GetClientGroup(SubscriptionRecord subscription);
+        SubscriptionRecord GetSubscription(ITcpClient client);
+        Group GetSubscriptionGroup(ITcpClient client);
+        ICollection<ITcpClient> GetGroupClients(Group group);
     }
 }

@@ -1,10 +1,9 @@
-﻿using System.Net.Sockets;
-using WebsocketBroker.Abstractions.POCO;
+﻿using WebsocketBroker.Abstractions.POCO;
 
 namespace WebsocketBroker.Abstractions
 {
     public interface IClientSelectionStratergy
     {
-        TcpClient SelectClient(Group group);
+        ITcpClient SelectClient(Group group);
     }
 }

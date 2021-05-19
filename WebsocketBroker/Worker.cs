@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using WebsocketBroker.Abstractions;
@@ -10,42 +11,51 @@ namespace WebsocketBroker
     {
         private readonly ILogger<Worker> _logger;
         private readonly IServer _server;
-        private readonly ITcpClientManager _tcpClientManager;
-        private readonly IConnectionManagement _connectionStratergy;
+        private readonly ITcpStreamManager _tcpClientManager;
         private readonly IRequestHandler _requestHandler;
+        private readonly IResponseHandler _responseHandler;
         private readonly IBrokerManager _brokerManager;
+        private readonly ITcpClientFactory _tcpClientFactory;
 
 
 
         public Worker(
             ILogger<Worker> logger,
             IServer server, 
-            ITcpClientManager tcpClientManager,
-            IConnectionManagement connectionStratergy,
+            ITcpStreamManager tcpClientManager,
+            ITcpClientFactory tcpClientFactory,
             IRequestHandler requestHandler,
+            IResponseHandler responseHandler,
             IBrokerManager brokerManager)
         {
             _logger = logger;
             _server = server;
             _tcpClientManager = tcpClientManager;
-            _connectionStratergy = connectionStratergy;
             _requestHandler = requestHandler;
+            _responseHandler = responseHandler;
             _brokerManager = brokerManager;
+            _tcpClientFactory = tcpClientFactory;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-        {          
-
-            var monitorConnections = _connectionStratergy.MonitorAsync(stoppingToken);
-            var requestProcessing = _requestHandler.BeginPorcessAsync(stoppingToken);
-            var brokerTask = _brokerManager.StartAsync(stoppingToken);
-
-            await foreach(var client in _server.StartAsync(stoppingToken))
+        {
+            try
             {
-               _tcpClientManager.AddClient(client);
-            }
+                var requestProcessing = _requestHandler.BeginPorcessAsync(stoppingToken);
+                var responseHandler = _requestHandler.BeginPorcessAsync(stoppingToken);
+                var brokerTask = _brokerManager.StartAsync(stoppingToken);
 
-            await Task.WhenAll(monitorConnections,requestProcessing).ConfigureAwait(false);
+                await foreach (var client in _server.StartAsync(stoppingToken))
+                {
+                    _tcpClientManager.AddClient(_tcpClientFactory.GetClient(client));
+                }
+
+                await Task.WhenAll(requestProcessing, brokerTask).ConfigureAwait(false);
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, $"Server failed with error.");
+            }
         }
 
         

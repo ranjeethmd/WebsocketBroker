@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Linq;
-using System.Net.Sockets;
 using WebsocketBroker.Abstractions;
 using WebsocketBroker.Abstractions.POCO;
 
@@ -17,7 +16,7 @@ namespace WebsocketBroker.Core.Default
             _subscriptionManager = subscriptionManager;
            
         }
-        public TcpClient SelectClient(Group group)
+        public ITcpClient SelectClient(Group group)
         {
             
             var clients = _subscriptionManager.GetGroupClients(group);

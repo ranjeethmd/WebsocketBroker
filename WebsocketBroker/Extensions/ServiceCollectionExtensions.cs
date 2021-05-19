@@ -14,7 +14,10 @@ namespace WebsocketBroker.Extensions
     {
         public static void Bootstrap(this IServiceCollection services)
         {
-            services.AddSingleton<ITcpClientManager, TcpClientManager>();
+            services.AddSingleton<TcpClientManager>();
+            services.AddSingleton<ITcpStreamManager>(provider =>  provider.GetRequiredService<TcpClientManager>());
+            services.AddSingleton<ITcpClientManager>(provider => provider.GetRequiredService<TcpClientManager>());
+
             services.AddSingleton<IRequestHandler, RequestHandler>();
 
             services.AddSingleton<IServer>( provider => {
@@ -26,7 +29,7 @@ namespace WebsocketBroker.Extensions
                 return new TcpServer(logger, IPAddress.Any, 80);              
             });
             services.AddSingleton<IBrokerManager, MessageBroker>();
-            services.AddSingleton<IConnectionManagement, PollingConnectionCheckStratergy>();
+            services.AddSingleton<ITcpClientFactory, TcpClientFactory>();
             services.AddSingleton<IFrameHandler, FrameHandler>();
             services.AddSingleton<IRequestHandler, RequestHandler>();
             services.AddSingleton<IResponseHandler, ResponseHandler>();
