@@ -4,7 +4,7 @@ Personal project to build message broker similar to Kafka on websocket protocol 
 
 # Desired Architecture
 
-![link provided by lucid.app](https://lucid.app/publicSegments/view/cc80bd62-aec4-4d7e-ac79-85628286f01f/image.png)
+![link provided by lucid.app](https://lucid.app/publicSegments/view/e04876f8-d51e-4e52-95dd-1b69098eeaf8/image.png)
 
 
 ## .NET Core is free and runs on linux.
